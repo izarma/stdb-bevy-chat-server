@@ -2,7 +2,6 @@ use bevy::prelude::*;
 
 use crate::socials::SocialsPlugin;
 
-mod consts;
 mod module_bindings;
 mod socials;
 
