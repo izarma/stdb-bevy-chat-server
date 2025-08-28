@@ -1,10 +1,10 @@
-#[warn(unused_imports)]
-use bevy::{log::LogPlugin, prelude::*};
+use bevy::prelude::*;
 
 use crate::socials::SocialsPlugin;
 
-mod socials;
+mod consts;
 mod module_bindings;
+mod socials;
 
 fn main() {
     let mut app = App::new();
