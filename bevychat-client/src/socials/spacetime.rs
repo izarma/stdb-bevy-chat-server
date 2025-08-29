@@ -1,11 +1,13 @@
 use bevy::prelude::*;
-use bevy_spacetimedb::{RegisterReducerEvent, StdbPlugin, ReducerResultEvent};
+use bevy_spacetimedb::{ReducerResultEvent, RegisterReducerEvent, StdbPlugin, TableEvents};
 use spacetimedb_sdk::ReducerEvent;
 
-use crate::module_bindings::{set_name, DbConnection, Reducer, RemoteTables, UserTableAccess, RemoteModule, RemoteReducers};
+use crate::module_bindings::{
+    DbConnection, MessageTableAccess, Reducer, RemoteModule, RemoteReducers, RemoteTables,
+    UserTableAccess, set_name,
+};
 
 pub struct SpaceTimePlugin;
-
 
 #[derive(Debug, RegisterReducerEvent)]
 #[allow(dead_code)]
@@ -22,7 +24,8 @@ impl Plugin for SpaceTimePlugin {
                 .with_module_name("bevychat")
                 .with_run_fn(DbConnection::run_threaded)
                 .add_table(RemoteTables::user)
-                .add_reducer::<SetName>()
+                .add_partial_table(RemoteTables::message, TableEvents::no_update())
+                .add_reducer::<SetName>(),
         );
     }
 }

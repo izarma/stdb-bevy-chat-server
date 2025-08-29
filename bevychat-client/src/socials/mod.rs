@@ -1,14 +1,34 @@
 use bevy::prelude::*;
+use bevy_spacetimedb::StdbConnection;
 
-use crate::socials::{chatui::ChatUIPlugin, spacetime::SpaceTimePlugin};
+use crate::{
+    module_bindings::DbConnection,
+    socials::{chatui::ChatUIPlugin, spacetime::SpaceTimePlugin},
+};
 
 pub mod chatui;
 pub mod spacetime;
 
 pub struct SocialsPlugin;
 
+pub type SpacetimeDB<'a> = Res<'a, StdbConnection<DbConnection>>;
+
+#[derive(Resource, Default, Clone)]
+pub struct UserInfo {
+    username: String,
+}
+
+#[derive(States, Clone, Eq, PartialEq, Debug, Hash, Default)]
+pub enum ChatState {
+    #[default]
+    LoggedOut,
+    LoggedIn,
+}
+
 impl Plugin for SocialsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins((SpaceTimePlugin, ChatUIPlugin));
+        app.insert_resource(UserInfo::default())
+            .init_state::<ChatState>()
+            .add_plugins((SpaceTimePlugin, ChatUIPlugin));
     }
 }
