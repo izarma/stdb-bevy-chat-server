@@ -24,8 +24,7 @@ impl Plugin for SpaceTimePlugin {
                 .with_module_name("bevychat")
                 .with_run_fn(DbConnection::run_threaded)
                 .add_table(RemoteTables::user)
-                .add_partial_table(RemoteTables::message, TableEvents::no_update())
-                .add_reducer::<SetName>(),
+                .add_table(RemoteTables::message),
         );
     }
 }
