@@ -1,11 +1,12 @@
 use bevy::prelude::*;
 use bevy_egui::{
     EguiContexts, EguiPlugin, EguiPrimaryContextPass, EguiStartupSet,
-    egui::{self, Align2, Layout},
+    egui::{self, Align2, Color32, FontId, Layout, RichText},
 };
+use spacetimedb_sdk::Table;
 
 use crate::{
-    module_bindings::{send_message, set_name},
+    module_bindings::{send_message, set_name, Message, MessageTableAccess, UserTableAccess},
     socials::{ChatState, SpacetimeDB, UserInfo},
 };
 
@@ -60,8 +61,10 @@ fn show_login_window(
         .show(contexts.ctx_mut()?, |ui| {
             ui.label("Set Username");
             ui.horizontal(|ui| {
-                ui.text_edit_singleline(&mut user_info.username);
-                if ui.add(egui::Button::new("Enter")).clicked() {
+                let response = ui.text_edit_singleline(&mut user_info.username);
+                if ui.add(egui::Button::new("Enter")).clicked()
+                    || response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter))
+                {
                     stdb.reducers()
                         .set_name(user_info.username.clone())
                         .unwrap();
@@ -80,15 +83,40 @@ fn show_main_window(
     egui::Window::new("Chat Window")
         .title_bar(false)
         .anchor(Align2::RIGHT_BOTTOM, [-20.0, -20.0])
-        .fixed_size([400.0, 300.0])
+        .fixed_size([700.0, 300.0])
         .show(contexts.ctx_mut()?, |ui| {
             egui::ScrollArea::vertical()
                 .stick_to_right(true) // didnt work
                 .scroll_bar_rect(ui.available_rect_before_wrap()) // also didnt work
                 .show(ui, |ui| {
-                    for i in 0..50 {
-                        ui.label(format!("Ghost {}: Hello world", i));
-                        ui.label(format!("World {}: Hello Ghost", i));
+                    stdb.subscription_builder()
+                        .on_error(|_, err| error!("Subscription to messages failed for: {}", err))
+                        .subscribe("SELECT * FROM message");
+                    stdb.subscription_builder()
+                        .on_error(|_, err| error!("Subscription to users failed for: {}", err))
+                        .subscribe("SELECT * FROM user");
+                    // need to get name column value from the unique row of user table with same value as msg.sender
+                    let mut messages: Vec<_> = stdb.db().message().iter().collect();
+                    messages.sort_by_key(|msg| msg.id);
+                    for msg in messages {
+                        let timestamp_str = msg.sent.to_rfc3339().unwrap_or_default();
+                        let sender_name = stdb.db().user().iter().find(|user| user.identity == msg.sender).unwrap();
+                        ui.horizontal(|ui| {
+                            ui.with_layout(Layout::left_to_right(egui::Align::LEFT), |ui| {
+                                ui.label(
+                                    RichText::new(format!("{} : {}", sender_name.name.unwrap_or_default(), msg.text))
+                                        .font(FontId::proportional(14.0))
+                                        .color(Color32::WHITE),
+                                );
+                            });
+                            ui.with_layout(Layout::right_to_left(egui::Align::RIGHT), |ui| {
+                                ui.label(
+                                    RichText::new(format!("{}", timestamp_str[11..19].to_string()))
+                                        .font(FontId::proportional(12.0))
+                                        .color(Color32::GRAY),
+                                );
+                            });
+                        });
                     }
                 });
             ui.add_space(10.0);
