@@ -6,7 +6,7 @@ use bevy_egui::{
 use spacetimedb_sdk::Table;
 
 use crate::{
-    module_bindings::{send_message, set_name, Message, MessageTableAccess, UserTableAccess},
+    module_bindings::{send_message, set_name, MessageTableAccess, UserTableAccess},
     socials::{ChatState, SpacetimeDB, UserInfo},
 };
 
