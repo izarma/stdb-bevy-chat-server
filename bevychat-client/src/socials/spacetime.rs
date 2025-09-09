@@ -5,8 +5,10 @@ use bevy_spacetimedb::StdbPlugin;
 use spacetimedb_sdk::{Identity, Table, Timestamp};
 
 use crate::{
-    module_bindings::{DbConnection, MessageTableAccess, RemoteTables, UserTableAccess},
-    socials::{ChatState, SpacetimeDB},
+    module_bindings::{
+        DbConnection, MessageTableAccess, RemoteTables, UserTableAccess, send_message,
+    },
+    socials::{ChatState, SpacetimeDB, chatui::SendMessageEvent},
 };
 
 pub struct SpaceTimePlugin;
@@ -25,7 +27,7 @@ impl Plugin for SpaceTimePlugin {
         .add_systems(OnEnter(ChatState::LoggedIn), subscribe_to_messages)
         .add_systems(
             Update,
-            populate_chat_data.run_if(in_state(ChatState::LoggedIn)),
+            (populate_chat_data, handle_send_message_event).run_if(in_state(ChatState::LoggedIn)),
         );
     }
 }
@@ -85,7 +87,16 @@ fn populate_chat_data(mut data: ResMut<ChatDataResource>, stdb: SpacetimeDB) {
                 let msg_data = ChatData::new(msg, usr);
                 data.last_processed_id = msg_data.msg_id;
                 data.msgs.push_back(msg_data);
+                if data.msgs.len() > 50 {
+                    data.msgs.pop_front();
+                }
             }
         }
+    }
+}
+
+fn handle_send_message_event(mut events: EventReader<SendMessageEvent>, stdb: SpacetimeDB) {
+    for event in events.read() {
+        stdb.reducers().send_message(event.content.clone()).unwrap();
     }
 }

@@ -6,7 +6,7 @@ use bevy_egui::{
 use spacetimedb_sdk::Timestamp;
 
 use crate::{
-    module_bindings::{send_message, set_name},
+    module_bindings::set_name,
     socials::{ChatState, SpacetimeDB, UserInfo, spacetime::ChatDataResource},
 };
 
@@ -16,6 +16,7 @@ impl Plugin for ChatUIPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(EguiPlugin::default())
             .insert_resource(UserAction::default())
+            .add_event::<SendMessageEvent>()
             .add_systems(
                 PreStartup,
                 setup_camera_system.before(EguiStartupSet::InitContexts),
@@ -33,7 +34,12 @@ impl Plugin for ChatUIPlugin {
 
 #[derive(Resource, Default, Clone)]
 pub struct UserAction {
-    message_sent: String,
+    currently_typing: String,
+}
+
+#[derive(Event)]
+pub struct SendMessageEvent {
+    pub content: String,
 }
 
 fn setup_camera_system(mut commands: Commands) {
@@ -78,8 +84,8 @@ fn show_login_window(
 fn show_main_window(
     mut contexts: EguiContexts,
     mut action: ResMut<UserAction>,
+    mut send_msg: EventWriter<SendMessageEvent>,
     chat_data: Res<ChatDataResource>,
-    stdb: SpacetimeDB,
 ) -> Result {
     egui::Window::new("Chat Window")
         .title_bar(false)
@@ -112,14 +118,14 @@ fn show_main_window(
             ui.add_space(10.0);
             ui.with_layout(Layout::bottom_up(egui::Align::LEFT), |ui| {
                 ui.horizontal(|ui| {
-                    let response = ui.text_edit_singleline(&mut action.message_sent);
+                    let response = ui.text_edit_singleline(&mut action.currently_typing);
                     if ui.add(egui::Button::new("Send")).clicked()
                         || response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter))
                     {
-                        stdb.reducers()
-                            .send_message(action.message_sent.clone())
-                            .unwrap();
-                        action.message_sent.clear();
+                        send_msg.write(SendMessageEvent {
+                            content: action.currently_typing.clone(),
+                        });
+                        action.currently_typing.clear();
                     }
                 });
             })
