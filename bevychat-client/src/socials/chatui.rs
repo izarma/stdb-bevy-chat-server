@@ -3,11 +3,11 @@ use bevy_egui::{
     EguiContexts, EguiPlugin, EguiPrimaryContextPass, EguiStartupSet,
     egui::{self, Align2, Color32, FontId, Layout, RichText},
 };
-use spacetimedb_sdk::Table;
+use spacetimedb_sdk::Timestamp;
 
 use crate::{
-    module_bindings::{send_message, set_name, MessageTableAccess, UserTableAccess},
-    socials::{ChatState, SpacetimeDB, UserInfo},
+    module_bindings::{send_message, set_name},
+    socials::{ChatState, SpacetimeDB, UserInfo, spacetime::ChatDataResource},
 };
 
 pub struct ChatUIPlugin;
@@ -78,6 +78,7 @@ fn show_login_window(
 fn show_main_window(
     mut contexts: EguiContexts,
     mut action: ResMut<UserAction>,
+    chat_data: Res<ChatDataResource>,
     stdb: SpacetimeDB,
 ) -> Result {
     egui::Window::new("Chat Window")
@@ -85,40 +86,29 @@ fn show_main_window(
         .anchor(Align2::RIGHT_BOTTOM, [-20.0, -20.0])
         .fixed_size([700.0, 300.0])
         .show(contexts.ctx_mut()?, |ui| {
-            egui::ScrollArea::vertical()
-                .stick_to_right(true) // didnt work
-                .scroll_bar_rect(ui.available_rect_before_wrap()) // also didnt work
-                .show(ui, |ui| {
-                    stdb.subscription_builder()
-                        .on_error(|_, err| error!("Subscription to messages failed for: {}", err))
-                        .subscribe("SELECT * FROM message");
-                    stdb.subscription_builder()
-                        .on_error(|_, err| error!("Subscription to users failed for: {}", err))
-                        .subscribe("SELECT * FROM user");
-                    // need to get name column value from the unique row of user table with same value as msg.sender
-                    let mut messages: Vec<_> = stdb.db().message().iter().collect();
-                    messages.sort_by_key(|msg| msg.id);
-                    for msg in messages {
-                        let timestamp_str = msg.sent.to_rfc3339().unwrap_or_default();
-                        let sender_name = stdb.db().user().iter().find(|user| user.identity == msg.sender).unwrap();
-                        ui.horizontal(|ui| {
-                            ui.with_layout(Layout::left_to_right(egui::Align::LEFT), |ui| {
-                                ui.label(
-                                    RichText::new(format!("{} : {}", sender_name.name.unwrap_or_default(), msg.text))
-                                        .font(FontId::proportional(14.0))
-                                        .color(Color32::WHITE),
-                                );
-                            });
-                            ui.with_layout(Layout::right_to_left(egui::Align::RIGHT), |ui| {
-                                ui.label(
-                                    RichText::new(format!("{}", timestamp_str[11..19].to_string()))
-                                        .font(FontId::proportional(12.0))
-                                        .color(Color32::GRAY),
-                                );
-                            });
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                for msg in &chat_data.msgs {
+                    ui.horizontal(|ui| {
+                        ui.with_layout(Layout::left_to_right(egui::Align::LEFT), |ui| {
+                            ui.label(
+                                RichText::new(format!(
+                                    "{} : {}",
+                                    msg.sender_username, msg.msg_text
+                                ))
+                                .font(FontId::proportional(14.0))
+                                .color(Color32::WHITE),
+                            );
                         });
-                    }
-                });
+                        ui.with_layout(Layout::right_to_left(egui::Align::RIGHT), |ui| {
+                            ui.label(
+                                RichText::new(format!("{}", get_formatted_time(msg.timestamp)))
+                                    .font(FontId::proportional(12.0))
+                                    .color(Color32::GRAY),
+                            );
+                        });
+                    });
+                }
+            });
             ui.add_space(10.0);
             ui.with_layout(Layout::bottom_up(egui::Align::LEFT), |ui| {
                 ui.horizontal(|ui| {
@@ -135,4 +125,8 @@ fn show_main_window(
             })
         });
     Ok(())
+}
+
+fn get_formatted_time(time: Timestamp) -> String {
+    time.to_rfc3339().unwrap_or_default()[11..19].to_string()
 }
