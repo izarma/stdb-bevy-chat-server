@@ -17,6 +17,7 @@ impl Plugin for ChatUIPlugin {
         app.add_plugins(EguiPlugin::default())
             .insert_resource(UserAction::default())
             .add_event::<SendMessageEvent>()
+            .add_event::<LoginEvent>()
             .add_systems(
                 PreStartup,
                 setup_camera_system.before(EguiStartupSet::InitContexts),
@@ -42,6 +43,12 @@ pub struct SendMessageEvent {
     pub content: String,
 }
 
+#[derive(Event)]
+pub enum LoginEvent {
+    Username(String),
+    Discord,
+}
+
 fn setup_camera_system(mut commands: Commands) {
     let main_camera = Camera2d::default();
     let projection = Projection::Orthographic(OrthographicProjection {
@@ -57,8 +64,7 @@ fn setup_camera_system(mut commands: Commands) {
 fn show_login_window(
     mut contexts: EguiContexts,
     mut user_info: ResMut<UserInfo>,
-    mut state: ResMut<NextState<ChatState>>,
-    stdb: SpacetimeDB,
+    mut login: EventWriter<LoginEvent>,
 ) -> Result {
     egui::Window::new("Login")
         .collapsible(false)
@@ -71,12 +77,13 @@ fn show_login_window(
                 if ui.add(egui::Button::new("Enter")).clicked()
                     || response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter))
                 {
-                    stdb.reducers()
-                        .set_name(user_info.username.clone())
-                        .unwrap();
-                    state.set(ChatState::LoggedIn);
+                    login.write(LoginEvent::Username(user_info.username.clone()));
+                    
                 }
-            })
+            });
+            if ui.add(egui::Button::new("Login with Discord")).clicked() {
+                login.write(LoginEvent::Discord);
+            }
         });
     Ok(())
 }

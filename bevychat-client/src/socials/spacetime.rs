@@ -6,9 +6,9 @@ use spacetimedb_sdk::{Identity, Table, Timestamp};
 
 use crate::{
     module_bindings::{
-        DbConnection, MessageTableAccess, RemoteTables, UserTableAccess, send_message,
+        send_message, set_name, DbConnection, MessageTableAccess, RemoteTables, UserTableAccess
     },
-    socials::{ChatState, SpacetimeDB, chatui::SendMessageEvent},
+    socials::{chatui::{LoginEvent, SendMessageEvent}, ChatState, SpacetimeDB},
 };
 
 pub struct SpaceTimePlugin;
@@ -28,7 +28,8 @@ impl Plugin for SpaceTimePlugin {
         .add_systems(
             Update,
             (populate_chat_data, handle_send_message_event).run_if(in_state(ChatState::LoggedIn)),
-        );
+        )
+        .add_systems(Update, login_event_handler.run_if(in_state(ChatState::LoggedOut)));
     }
 }
 
@@ -98,5 +99,17 @@ fn populate_chat_data(mut data: ResMut<ChatDataResource>, stdb: SpacetimeDB) {
 fn handle_send_message_event(mut events: EventReader<SendMessageEvent>, stdb: SpacetimeDB) {
     for event in events.read() {
         stdb.reducers().send_message(event.content.clone()).unwrap();
+    }
+}
+
+fn login_event_handler(mut events: EventReader<LoginEvent>, stdb: SpacetimeDB, mut state: ResMut<NextState<ChatState>>,) {
+    for event in events.read() {
+        match event {
+            LoginEvent::Username(usr) => {
+                stdb.reducers().set_name(usr.to_string()).unwrap();
+                state.set(ChatState::LoggedIn);
+            },
+            LoginEvent::Discord => todo!(),
+        }
     }
 }
