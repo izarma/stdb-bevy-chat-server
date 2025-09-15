@@ -78,7 +78,6 @@ fn show_login_window(
                     || response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter))
                 {
                     login.write(LoginEvent::Username(user_info.username.clone()));
-                    
                 }
             });
             if ui.add(egui::Button::new("Login with Discord")).clicked() {

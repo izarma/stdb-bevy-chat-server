@@ -7,8 +7,8 @@ use crate::{
 };
 
 pub mod chatui;
-pub mod spacetime;
 pub mod discord;
+pub mod spacetime;
 
 pub struct SocialsPlugin;
 
