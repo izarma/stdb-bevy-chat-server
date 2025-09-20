@@ -5,10 +5,7 @@ use bevy_egui::{
 };
 use spacetimedb_sdk::Timestamp;
 
-use crate::{
-    module_bindings::set_name,
-    socials::{ChatState, SpacetimeDB, UserInfo, spacetime::ChatDataResource},
-};
+use crate::socials::{ChatState, UserInfo, spacetime::ChatDataResource};
 
 pub struct ChatUIPlugin;
 

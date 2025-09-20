@@ -3,7 +3,7 @@ use std::collections::VecDeque;
 use bevy::prelude::*;
 use bevy_http_client::{HttpClient, HttpRequest, HttpResponse, HttpResponseError};
 use bevy_spacetimedb::StdbPlugin;
-use spacetimedb_sdk::{Identity, Table, Timestamp};
+use spacetimedb_sdk::{Table, Timestamp};
 
 use crate::{
     module_bindings::{
@@ -36,7 +36,8 @@ impl Plugin for SpaceTimePlugin {
         .add_systems(
             Update,
             login_event_handler.run_if(in_state(ChatState::LoggedOut)),
-        ).add_systems(
+        )
+        .add_systems(
             Update,
             (handle_response, handle_error).run_if(in_state(ChatState::LoggedOut)),
         );
@@ -140,11 +141,13 @@ fn login_event_handler(
     }
 }
 
-
 fn handle_response(mut ev_resp: EventReader<HttpResponse>) {
     for response in ev_resp.read() {
         info!("response {}", response.text().unwrap());
-        let authorize_url= format!("https://discord.com/oauth2/authorize?client_id=1415091415574118560&state={}&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A42069%2F&scope=identify", response.text().unwrap().to_string());
+        let authorize_url = format!(
+            "https://discord.com/oauth2/authorize?client_id=1415091415574118560&state={}&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A42069%2F&scope=identify+guilds.members.read",
+            response.text().unwrap().to_string()
+        );
         println!("url: {:#?}", authorize_url);
         let _jh = open::that_in_background(authorize_url);
     }

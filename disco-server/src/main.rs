@@ -1,60 +1,50 @@
-use axum::{
-    Router,
-    extract::{Path, State},
-    routing::get,
-};
-use base64::{Engine, prelude::BASE64_URL_SAFE_NO_PAD};
-use rand::{Rng, rng};
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex}, time::{Duration, Instant},
+use axum::{Router, routing::get};
+use std::sync::{Arc, OnceLock};
+use tokio::sync::Mutex;
+
+use crate::{
+    authorize::disco_auth,
+    csrf::{CsrfCache, get_csrf, start_cleanup},
+    module_bindings::DbConnection,
+    stdb::connect_to_db,
 };
 
-#[derive(Clone)]
-struct AppState {
-    cache: Arc<Mutex<HashMap<String, (String, Instant)>>>,
-}
+mod authorize;
+mod csrf;
+mod module_bindings;
+mod secret;
+mod stdb;
 
-struct AuthResponse {
-    code: String,
-    csrf: String,
+static DB_CONNECTION: OnceLock<DbConnection> = OnceLock::new();
+
+pub(crate) type SharedCache = Arc<Mutex<CsrfCache>>;
+
+// Accessor function for the database connection
+pub fn db() -> &'static DbConnection {
+    DB_CONNECTION.get().expect("Database not connected")
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> anyhow::Result<()> {
+    // Connect to SpacetimeDB
+    let ctx = connect_to_db();
+    ctx.run_threaded();
+    DB_CONNECTION.set(ctx).ok().unwrap();
+    // Axum Routes
     let addr = "0.0.0.0:42069";
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, router()).await.unwrap();
+    Ok(())
 }
 
 fn router() -> Router {
-    let state = AppState {
-        cache: Arc::new(Mutex::new(HashMap::new())),
-    };
+    let cache = SharedCache::new(Mutex::new(CsrfCache::new()));
+    let cleanup_cache = cache.clone();
+    tokio::spawn(async move {
+        start_cleanup(cleanup_cache).await;
+    });
     Router::new()
-        .route("/", get(hello_world))
+        .route("/", get(disco_auth))
         .route("/csrf/{identity}", get(get_csrf))
-        .with_state(state)
-}
-
-async fn hello_world() -> &'static str {
-    "Hello from Axum!"
-}
-
-async fn get_csrf(State(state): State<AppState>, Path(identity): Path<String>) -> String {
-    let mut cache = state.cache.lock().unwrap();
-    let now = Instant::now();
-    if let Some((csrf, timestamp)) = cache.get(&identity) {
-        if now.duration_since(*timestamp) < Duration::from_secs(3600) {
-            return csrf.to_string();
-        }
-    }
-    let csrf = generate_csrf();
-    cache.insert(identity, (csrf.clone(), now));
-    csrf
-}
-
-fn generate_csrf() -> String {
-    let random_bytes: Vec<u8> = (0..16).map(|_| rng().random::<u8>()).collect();
-    BASE64_URL_SAFE_NO_PAD.encode(random_bytes)
+        .with_state(cache)
 }

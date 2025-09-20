@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_http_client::{HttpClientPlugin};
+use bevy_http_client::HttpClientPlugin;
 
 pub struct DiscordPlugin;
 
