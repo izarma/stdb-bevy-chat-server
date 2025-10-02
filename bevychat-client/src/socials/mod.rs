@@ -17,6 +17,7 @@ pub type SpacetimeDB<'a> = Res<'a, StdbConnection<DbConnection>>;
 #[derive(Resource, Default, Clone)]
 pub struct UserInfo {
     username: String,
+    space_token: Option<String>,
 }
 
 #[derive(States, Clone, Eq, PartialEq, Debug, Hash, Default)]

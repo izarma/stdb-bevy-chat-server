@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 
 use bevy::prelude::*;
 use bevy_http_client::{HttpClient, HttpRequest, HttpResponse, HttpResponseError};
-use bevy_spacetimedb::StdbPlugin;
+use bevy_spacetimedb::{StdbConnectedEvent, StdbPlugin};
 use spacetimedb_sdk::{Table, Timestamp};
 
 use crate::{
@@ -10,7 +10,7 @@ use crate::{
         DbConnection, MessageTableAccess, RemoteTables, UserTableAccess, send_message, set_name,
     },
     socials::{
-        ChatState, SpacetimeDB,
+        ChatState, SpacetimeDB, UserInfo,
         chatui::{LoginEvent, SendMessageEvent},
     },
 };
@@ -35,11 +35,13 @@ impl Plugin for SpaceTimePlugin {
         )
         .add_systems(
             Update,
-            login_event_handler.run_if(in_state(ChatState::LoggedOut)),
-        )
-        .add_systems(
-            Update,
-            (handle_response, handle_error).run_if(in_state(ChatState::LoggedOut)),
+            (
+                store_token,
+                login_event_handler,
+                handle_response,
+                handle_error,
+            )
+                .run_if(in_state(ChatState::LoggedOut)),
         );
     }
 }
@@ -118,6 +120,7 @@ fn login_event_handler(
     stdb: SpacetimeDB,
     mut state: ResMut<NextState<ChatState>>,
     mut ev_request: EventWriter<HttpRequest>,
+    user_info: Res<UserInfo>,
 ) {
     for event in events.read() {
         match event {
@@ -126,8 +129,9 @@ fn login_event_handler(
                 state.set(ChatState::LoggedIn);
             }
             LoginEvent::Discord => {
-                let url = format!("http://localhost:42069/csrf/{}", stdb.identity());
-                info!("identity: {}", url);
+                let token = user_info.space_token.clone().unwrap();
+                let url = format!("http://localhost:42069/csrf/{}", token);
+                info!("auth url : {}", url);
                 match HttpClient::new().get(url).try_build() {
                     Ok(request) => {
                         ev_request.write(request);
@@ -156,5 +160,14 @@ fn handle_response(mut ev_resp: EventReader<HttpResponse>) {
 fn handle_error(mut ev_error: EventReader<HttpResponseError>) {
     for error in ev_error.read() {
         println!("Error retrieving IP: {}", error.err);
+    }
+}
+
+fn store_token(mut ev_conn: EventReader<StdbConnectedEvent>, mut user_info: ResMut<UserInfo>) {
+    if user_info.space_token.is_none() {
+        if let Some(event) = ev_conn.read().next() {
+            // Extract the access token from the connection event and store it.
+            user_info.space_token = Some(event.access_token.clone());
+        }
     }
 }

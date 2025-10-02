@@ -32,8 +32,7 @@ pub(crate) async fn disco_auth(
     query: Query<AuthResponse>,
 ) -> Result<String, StatusCode> {
     let mut cache = state.lock().await;
-    let id = cache.take_by_state(&query.state);
-    match id {
+    match cache.take_by_state(&query.state) {
         None => {
             return Err(StatusCode::INTERNAL_SERVER_ERROR);
         }
