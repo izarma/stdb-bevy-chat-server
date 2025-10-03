@@ -11,6 +11,3 @@ publish-web:
 
 gen-binds:
     spacetime generate --lang rust --out-dir bevychat-client/src/module_bindings --project-path server
-
-bind-disco:
-    spacetime generate --lang rust --out-dir disco-server/src/module_bindings --project-path server
