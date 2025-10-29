@@ -13,8 +13,8 @@ impl Plugin for ChatUIPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(EguiPlugin::default())
             .insert_resource(UserAction::default())
-            .add_event::<SendMessageEvent>()
-            .add_event::<LoginEvent>()
+            .add_message::<SendMessage>()
+            .add_message::<LoginMessage>()
             .add_systems(
                 PreStartup,
                 setup_camera_system.before(EguiStartupSet::InitContexts),
@@ -35,13 +35,13 @@ pub struct UserAction {
     currently_typing: String,
 }
 
-#[derive(Event)]
-pub struct SendMessageEvent {
+#[derive(Message)]
+pub struct SendMessage {
     pub content: String,
 }
 
-#[derive(Event)]
-pub enum LoginEvent {
+#[derive(Message)]
+pub enum LoginMessage {
     Username(String),
     Discord,
 }
@@ -49,7 +49,7 @@ pub enum LoginEvent {
 fn setup_camera_system(mut commands: Commands) {
     let main_camera = Camera2d::default();
     let projection = Projection::Orthographic(OrthographicProjection {
-        scaling_mode: bevy::render::camera::ScalingMode::AutoMin {
+        scaling_mode: bevy::camera::ScalingMode::AutoMin {
             min_width: (1920.0),
             min_height: (1080.0),
         },
@@ -61,7 +61,7 @@ fn setup_camera_system(mut commands: Commands) {
 fn show_login_window(
     mut contexts: EguiContexts,
     mut user_info: ResMut<UserInfo>,
-    mut login: EventWriter<LoginEvent>,
+    mut login: MessageWriter<LoginMessage>,
 ) -> Result {
     egui::Window::new("Login")
         .collapsible(false)
@@ -74,11 +74,11 @@ fn show_login_window(
                 if ui.add(egui::Button::new("Enter")).clicked()
                     || response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter))
                 {
-                    login.write(LoginEvent::Username(user_info.username.clone()));
+                    login.write(LoginMessage::Username(user_info.username.clone()));
                 }
             });
             if ui.add(egui::Button::new("Login with Discord")).clicked() {
-                login.write(LoginEvent::Discord);
+                login.write(LoginMessage::Discord);
             }
         });
     Ok(())
@@ -87,7 +87,7 @@ fn show_login_window(
 fn show_main_window(
     mut contexts: EguiContexts,
     mut action: ResMut<UserAction>,
-    mut send_msg: EventWriter<SendMessageEvent>,
+    mut send_msg: MessageWriter<SendMessage>,
     chat_data: Res<ChatDataResource>,
 ) -> Result {
     egui::Window::new("Chat Window")
@@ -125,7 +125,7 @@ fn show_main_window(
                     if ui.add(egui::Button::new("Send")).clicked()
                         || response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter))
                     {
-                        send_msg.write(SendMessageEvent {
+                        send_msg.write(SendMessage {
                             content: action.currently_typing.clone(),
                         });
                         action.currently_typing.clear();

@@ -1,8 +1,7 @@
 use std::collections::VecDeque;
 
-use bevy::prelude::*;
-use bevy_http_client::{HttpClient, HttpRequest, HttpResponse, HttpResponseError};
-use bevy_spacetimedb::{StdbConnectedEvent, StdbPlugin};
+use bevy::{prelude::*, tasks::IoTaskPool};
+use bevy_spacetimedb::{StdbConnectedMessage, StdbPlugin};
 use spacetimedb_sdk::{Table, Timestamp};
 
 use crate::{
@@ -11,8 +10,9 @@ use crate::{
     },
     socials::{
         ChatState, SpacetimeDB, UserInfo,
-        chatui::{LoginEvent, SendMessageEvent},
+        chatui::{LoginMessage, SendMessage},
     },
+    utils::{generate_csrf_state, pkce_challenge, pkce_verifier},
 };
 
 pub struct SpaceTimePlugin;
@@ -35,13 +35,7 @@ impl Plugin for SpaceTimePlugin {
         )
         .add_systems(
             Update,
-            (
-                store_token,
-                login_event_handler,
-                handle_response,
-                handle_error,
-            )
-                .run_if(in_state(ChatState::LoggedOut)),
+            (store_token, login_event_handler).run_if(in_state(ChatState::LoggedOut)),
         );
     }
 }
@@ -109,61 +103,69 @@ fn populate_chat_data(mut data: ResMut<ChatDataResource>, stdb: SpacetimeDB) {
     }
 }
 
-fn handle_send_message_event(mut events: EventReader<SendMessageEvent>, stdb: SpacetimeDB) {
+fn handle_send_message_event(mut events: MessageReader<SendMessage>, stdb: SpacetimeDB) {
     for event in events.read() {
         stdb.reducers().send_message(event.content.clone()).unwrap();
     }
 }
 
 fn login_event_handler(
-    mut events: EventReader<LoginEvent>,
+    mut events: MessageReader<LoginMessage>,
     stdb: SpacetimeDB,
     mut state: ResMut<NextState<ChatState>>,
-    mut ev_request: EventWriter<HttpRequest>,
-    user_info: Res<UserInfo>,
 ) {
     for event in events.read() {
         match event {
-            LoginEvent::Username(usr) => {
+            LoginMessage::Username(usr) => {
                 stdb.reducers().set_name(usr.to_string()).unwrap();
                 state.set(ChatState::LoggedIn);
             }
-            LoginEvent::Discord => {
-                let token = user_info.space_token.clone().unwrap();
-                let url = format!("http://localhost:42069/csrf/{}", token);
-                info!("auth url : {}", url);
-                match HttpClient::new().get(url).try_build() {
-                    Ok(request) => {
-                        ev_request.write(request);
-                    }
-                    Err(e) => {
-                        eprintln!("Failed to build request: {}", e);
-                    }
-                }
+            LoginMessage::Discord => {
+                let verifier = pkce_verifier();
+                let challenge = pkce_challenge(&verifier);
+                let state = generate_csrf_state();
+                let stdb_client_id = "client_031LPfBM8jHxvge4NX9CNr";
+                let redirect_uri = "http://127.0.0.1:42069";
+                let auth_url = format!(
+                    "https://auth.spacetimedb.com/oidc/auth?client_id={}&redirect_uri={}&scope=openid%20email%20profile&response_type=code&response_mode=query&code_challenge_method=S256&code_challenge={}&state={}",
+                    stdb_client_id, redirect_uri, challenge, state
+                );
+                let expected_state = state.clone();
+                IoTaskPool::get()
+                    .spawn(async move {
+                        info!("Starting server");
+                        let server = tiny_http::Server::http("127.0.0.1:42069").unwrap();
+                        let request = server.recv().unwrap();
+                        let url = request.url();
+                        // Parse query parameters from URL
+                        let query_string = url.trim_start_matches("/?");
+                        let mut code = None;
+                        let mut state = None;
+
+                        for param in query_string.split('&') {
+                            let parts: Vec<&str> = param.split('=').collect();
+                            if parts.len() == 2 {
+                                match parts[0] {
+                                    "code" => code = Some(parts[1].to_string()),
+                                    "state" => state = Some(parts[1].to_string()),
+                                    _ => {}
+                                }
+                            }
+                        }
+                        if let (Some(received_state), Some(auth_code)) = (state, code) {
+                            if received_state == expected_state {
+                                info!("Successfully received auth code: {}", auth_code);
+                            }
+                        }
+                    })
+                    .detach();
+                let _jh = open::that_in_background(auth_url);
             }
         }
     }
 }
 
-fn handle_response(mut ev_resp: EventReader<HttpResponse>) {
-    for response in ev_resp.read() {
-        info!("response {}", response.text().unwrap());
-        let authorize_url = format!(
-            "https://discord.com/oauth2/authorize?client_id=1415091415574118560&state={}&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A42069%2F&scope=identify+guilds.members.read",
-            response.text().unwrap().to_string()
-        );
-        println!("url: {:#?}", authorize_url);
-        let _jh = open::that_in_background(authorize_url);
-    }
-}
-
-fn handle_error(mut ev_error: EventReader<HttpResponseError>) {
-    for error in ev_error.read() {
-        println!("Error retrieving IP: {}", error.err);
-    }
-}
-
-fn store_token(mut ev_conn: EventReader<StdbConnectedEvent>, mut user_info: ResMut<UserInfo>) {
+fn store_token(mut ev_conn: MessageReader<StdbConnectedMessage>, mut user_info: ResMut<UserInfo>) {
     if user_info.space_token.is_none() {
         if let Some(event) = ev_conn.read().next() {
             // Extract the access token from the connection event and store it.

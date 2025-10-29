@@ -4,6 +4,7 @@ use crate::socials::SocialsPlugin;
 
 mod module_bindings;
 mod socials;
+mod utils;
 
 fn main() {
     let mut app = App::new();
