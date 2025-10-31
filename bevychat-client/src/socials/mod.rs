@@ -3,11 +3,11 @@ use bevy_spacetimedb::StdbConnection;
 
 use crate::{
     module_bindings::DbConnection,
-    socials::{chatui::ChatUIPlugin, discord::DiscordPlugin, spacetime::SpaceTimePlugin},
+    socials::{chatui::ChatUIPlugin, spacetime::SpaceTimePlugin},
 };
 
 pub mod chatui;
-pub mod discord;
+pub mod login;
 pub mod spacetime;
 
 pub struct SocialsPlugin;
@@ -31,6 +31,6 @@ impl Plugin for SocialsPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(UserInfo::default())
             .init_state::<ChatState>()
-            .add_plugins((SpaceTimePlugin, ChatUIPlugin, DiscordPlugin));
+            .add_plugins((SpaceTimePlugin, ChatUIPlugin));
     }
 }
